@@ -6,16 +6,21 @@ function formatBarcode(num) {
 }
 
 let bookscanner_template = `
-<div id="intro">
-  <select>
-    <option>Default Camera</option>
-  </select> <button>Start</button>
+<div class="intro">
+  <h1>Internet Archive</h1>
+  <h2>ISBN Scanner</h2>
+  <formset>
+    <select>
+      <option>Default Camera</option>
+    </select>
+    <button>Start</button>
+  </formset>
 </div>
-<div id="main">
-  <div id="preview"></div>
-  <video id="video" style="border: 1px solid gray"></video>
-  <canvas>
-  <input name="isbn" size="13">
+<div class="main">
+  <div class="preview">
+    <video id="video"></video>
+    <canvas></canvas>
+  </div>
 </div>
 `;
 
@@ -26,33 +31,34 @@ class BookScanner extends HTMLElement {
   connectedCallback(ev) {
     this.corsproxy = this.getAttribute('corsproxy') || '';
     this.fullscreen = this.getAttribute('fullscreen') || false;
+    this.refreshtime = parseInt(this.getAttribute('refreshtime')) || 16;
     this.innerHTML = bookscanner_template;
 
-    let intro = this.querySelector('#intro'),
-        main = this.querySelector('#main');
+    let intro = this.querySelector('.intro'),
+        main = this.querySelector('.main');
 
     if (!main) {
       main = document.createElement('div');
-      main.id = 'main';
+      main.className = 'main';
       document.body.appendChild(main);
     }
 
-    let isbn = main.querySelector('input'),
+    let preview = main.querySelector('.preview'),
         canvas = main.querySelector('canvas'),
         ctx = canvas.getContext('2d'),
         statuswant = document.querySelector('#statuswant'),
         statusdontwant = document.querySelector('#statusdontwant');
 
-    this.codeReader = new ZXing.BrowserMultiFormatReader(null, 16),
-    this.codeReader.timeBetweenDecodingAttempts = 16;
+    this.codeReader = new ZXing.BrowserMultiFormatReader(null, this.refreshtime),
+    this.codeReader.timeBetweenDecodingAttempts = this.refreshtime;
     this.archivedata = {};
     this.isbndata = {};
 
+    this.elements = { intro, main, preview, canvas };
     let drawdata = this.drawdata = {
       isbn: false,
       pos0: false,
       pos1: false,
-      canvas: canvas,
       ctx: ctx
     };
     this.reticle = [
@@ -82,11 +88,15 @@ class BookScanner extends HTMLElement {
         });
         //this.selectedDeviceId = devices[2].deviceId;
       });
+    startbutton.addEventListener('touchend', () => {
+      // Go fullscreen on mobile
+      this.requestFullscreen();
+    });
     startbutton.addEventListener('click', () => {
       console.log('starting...');
-      intro.className = 'hidden';
+      intro.classList.add('hidden');
       if (this.fullscreen) {
-        main.requestFullscreen();
+        this.elements.main.requestFullscreen();
       }
       this.codeReader.decodeFromVideoDevice(this.selectedDeviceId, 'video', (result, err) => {
         if (result) {
@@ -113,16 +123,21 @@ class BookScanner extends HTMLElement {
   resetCanvas() {
     let drawdata = this.drawdata,
         video = drawdata.video,
-        canvas = drawdata.canvas,
+        canvas = this.elements.canvas,
         ctx = drawdata.ctx;
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    if (canvas.className != 'shown') {
-      canvas.className = 'shown';
+    if (!canvas.classList.contains('shown')) {
+      canvas.classList.add('shown');
     }
-    canvas.style.zoom = Math.min(video.offsetWidth / video.videoWidth, video.offsetHeight / video.videoHeight);
+console.log([this.elements.preview.offsetWidth, this.elements.preview.offsetHeight], [video.videoWidth, video.videoHeight]);
+    //let scale = Math.min(this.elements.preview.offsetWidth / video.videoWidth, this.elements.preview.offsetHeight / video.videoHeight);
+    let scale = Math.min(video.videoWidth / this.elements.preview.offsetWidth, video.videoHeight / this.elements.preview.offsetHeight);
+    canvas.style.transform = 'scale(' + scale + ')';
+    video.style.transform = 'scale(' + scale + ')';
+    canvas.style.top = video.offsetTop + 'px';
 
     ctx.strokeStyle = 'rgba(255,0,0,.4)';
     ctx.lineWidth = 3;
@@ -137,7 +152,7 @@ class BookScanner extends HTMLElement {
     let drawdata = this.drawdata,
         ctx = drawdata.ctx;
     if (!drawdata.video) {
-      drawdata.video = main.querySelector('video');
+      drawdata.video = this.elements.main.querySelector('video');
     }
     let video = drawdata.video;
 
@@ -228,7 +243,7 @@ class BookScanner extends HTMLElement {
   }
   getReticlePoints() {
     let reticle = this.reticle,
-        canvas = this.drawdata.canvas;
+        canvas = this.elements.canvas;
     let points = {
       p0: {x: canvas.width * reticle[0].x, y: canvas.height * reticle[0].y},
       p1: {x: canvas.width * reticle[1].x, y: canvas.height * reticle[1].y},
